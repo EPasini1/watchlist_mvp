@@ -34,8 +34,18 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _search() async {
     final q = _controller.text.trim();
     if (q.isEmpty) return;
+
     final res = await _api.searchTitles(q);
-    setState(() => _results = res);
+
+    // Segurança extra: dedupe também aqui (caso futuro)
+    final seen = <String>{};
+    final deduped = <Movie>[];
+    for (final m in res) {
+      final id = m.imdbID.toLowerCase();
+      if (seen.add(id)) deduped.add(m);
+    }
+
+    setState(() => _results = deduped);
   }
 
   Future<void> _toggleSave(Movie m) async {
@@ -86,10 +96,22 @@ class _SearchScreenState extends State<SearchScreen> {
                     itemBuilder: (_, i) {
                       final m = _results[i];
                       final saved = _savedIds.contains(m.imdbID);
+
+                      Widget leading;
+                      if (m.poster != 'N/A' && m.poster.trim().isNotEmpty) {
+                        leading = Image.network(
+                          m.poster,
+                          width: 50,
+                          fit: BoxFit.cover,
+                          // Evita “HTTP request failed: statusCode 0” (CORS no Web)
+                          errorBuilder: (ctx, err, st) => const Icon(Icons.image_not_supported),
+                        );
+                      } else {
+                        leading = const Icon(Icons.movie);
+                      }
+
                       return ListTile(
-                        leading: (m.poster != 'N/A')
-                            ? Image.network(m.poster, width: 50, fit: BoxFit.cover)
-                            : const Icon(Icons.movie),
+                        leading: leading,
                         title: Text(m.title),
                         subtitle: Text('${m.year}  •  ${m.type}'),
                         trailing: IconButton(
