@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeController>(context);
     return MaterialApp(
-      title: 'Catálogo de Séries e Filmes',
+      title: 'CineTrack',
       theme: ThemeData.light(),
       darkTheme: ThemeData.dark(),
       themeMode: theme.currentTheme, // começa claro, persiste escolha

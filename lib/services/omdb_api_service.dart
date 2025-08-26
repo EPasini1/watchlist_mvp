@@ -4,7 +4,7 @@ import '../models/movie.dart';
 
 class OmdbApiService {
   static const String _apiKey = 'e9f9fbfc';
-  static const String _baseUrl = 'http://www.omdbapi.com/';
+  static const String _baseUrl = 'https://www.omdbapi.com/';
 
   Future<List<Movie>> searchTitles(String query) async {
     final q = Uri.encodeComponent(query.trim());
