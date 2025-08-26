@@ -34,7 +34,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Movie> get _movies =>
       _watchlist.where((m) => m.type.toLowerCase() == 'movie').toList();
 
-  Widget _buildCard(Movie m) {
+  // --------- SÉRIES (abre detalhes p/ marcar episódios) ----------
+  Widget _buildSeriesCard(Movie m) {
     return FutureBuilder(
       future: Future.wait([
         WatchlistHelper.getWatchedEpisodes(m.imdbID),
@@ -52,23 +53,22 @@ class _HomeScreenState extends State<HomeScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: InkWell(
             onTap: () async {
-              if (m.type.toLowerCase() == 'series') {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => SeriesDetailScreen(
-                      imdbID: m.imdbID,
-                      title: m.title,
-                    ),
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SeriesDetailScreen(
+                    imdbID: m.imdbID,
+                    title: m.title,
                   ),
-                );
-                _loadWatchlist(); // refresh ao voltar
-              }
+                ),
+              );
+              _loadWatchlist(); // refresh ao voltar
             },
             child: Row(
               children: [
                 (m.poster != 'N/A')
-                    ? Image.network(m.poster, width: 80, height: 100, fit: BoxFit.cover)
+                    ? Image.network(m.poster, width: 80, height: 100, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.image))
                     : Container(width: 80, height: 100, color: Colors.grey),
                 const SizedBox(width: 10),
                 Expanded(
@@ -117,7 +117,46 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildList(List<Movie> data) {
+  // --------- FILMES (checkbox direto na lista) ----------
+  Widget _buildMovieCard(Movie m) {
+    return FutureBuilder<bool>(
+      future: WatchlistHelper.isMovieWatched(m.imdbID),
+      builder: (context, snap) {
+        final watched = snap.data ?? false;
+
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            children: [
+              (m.poster != 'N/A')
+                  ? Image.network(m.poster, width: 80, height: 100, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.image))
+                  : Container(width: 80, height: 100, color: Colors.grey),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ListTile(
+                  title: Text(m.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(m.year),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Checkbox(
+                  value: watched,
+                  onChanged: (val) async {
+                    await WatchlistHelper.setMovieWatched(m.imdbID, val ?? false);
+                    setState(() {}); // atualiza item
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildList(List<Movie> data, {required bool isSeriesTab}) {
     if (data.isEmpty) {
       return const Center(child: Text('Nada por aqui ainda.'));
     }
@@ -126,7 +165,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         itemCount: data.length,
-        itemBuilder: (_, i) => _buildCard(data[i]),
+        itemBuilder: (_, i) =>
+            isSeriesTab ? _buildSeriesCard(data[i]) : _buildMovieCard(data[i]),
       ),
     );
   }
@@ -136,7 +176,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Provider.of<ThemeController>(context, listen: false);
 
     final titles = ['Séries', 'Filmes'];
-    final body = _currentIndex == 0 ? _buildList(_series) : _buildList(_movies);
+    final body = _currentIndex == 0
+        ? _buildList(_series, isSeriesTab: true)
+        : _buildList(_movies, isSeriesTab: false);
 
     return Scaffold(
       appBar: AppBar(
@@ -146,6 +188,16 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.brightness_6),
             onPressed: () => theme.toggleTheme(),
           ),
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SearchScreen()),
+              );
+              _loadWatchlist();
+            },
+          ),
         ],
       ),
       body: body,
@@ -153,29 +205,19 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         onTap: (i) async {
           if (i == 2) {
-            // Explorar abre a tela de busca
             await Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const SearchScreen()),
             );
-            _loadWatchlist(); // recarrega ao voltar
+            _loadWatchlist();
           } else {
             setState(() => _currentIndex = i);
           }
         },
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.tv),
-            label: 'Séries',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.movie_creation_outlined),
-            label: 'Filmes',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: 'Explorar',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.tv), label: 'Séries'),
+          BottomNavigationBarItem(icon: Icon(Icons.movie_creation_outlined), label: 'Filmes'),
+          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Explorar'),
         ],
       ),
     );

@@ -7,6 +7,10 @@ class WatchlistHelper {
   static const String _watchlistKey = 'watchlist';
   static String _watchedKey(String imdbID) => 'watched_$imdbID';
 
+  // 🔹 NOVO: chave para "filme assistido"
+  static String _movieWatchedKey(String imdbID) => 'movie_watched_$imdbID';
+
+  // ---------- Watchlist ----------
   static Future<void> saveToWatchlist(Movie movie) async {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList(_watchlistKey) ?? [];
@@ -21,6 +25,7 @@ class WatchlistHelper {
     list.removeWhere((e) => Movie.fromJson(jsonDecode(e)).imdbID == imdbID);
     await prefs.setStringList(_watchlistKey, list);
     await prefs.remove(_watchedKey(imdbID));
+    await prefs.remove(_movieWatchedKey(imdbID)); // 🔹 limpa flag do filme
   }
 
   static Future<List<Movie>> getWatchlist() async {
@@ -34,6 +39,7 @@ class WatchlistHelper {
     return items.map((m) => m.imdbID).toSet();
   }
 
+  // ---------- Série: episódios assistidos ----------
   static Future<List<String>> getWatchedEpisodes(String imdbID) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getStringList(_watchedKey(imdbID)) ?? [];
@@ -71,5 +77,21 @@ class WatchlistHelper {
     if (total == 0) return '🟢 Em andamento';
     if (watched.length >= total) return '✅ Finalizado';
     return '🟢 Em andamento';
+  }
+
+  // ---------- Filme: flag "assistido" ----------
+  static Future<bool> isMovieWatched(String imdbID) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_movieWatchedKey(imdbID)) ?? false;
+  }
+
+  static Future<void> setMovieWatched(String imdbID, bool watched) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_movieWatchedKey(imdbID), watched);
+  }
+
+  static Future<void> toggleMovieWatched(String imdbID) async {
+    final current = await isMovieWatched(imdbID);
+    await setMovieWatched(imdbID, !current);
   }
 }
