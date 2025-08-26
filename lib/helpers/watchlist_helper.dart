@@ -7,13 +7,18 @@ class WatchlistHelper {
   static const String _watchlistKey = 'watchlist';
   static String _watchedKey(String imdbID) => 'watched_$imdbID';
 
-  // 🔹 NOVO: chave para "filme assistido"
+  // 🔹 filme assistido (permanece igual ao que você já tinha)
   static String _movieWatchedKey(String imdbID) => 'movie_watched_$imdbID';
+
+  // 🔥 NOVO: carimbo de atividade para ordenar séries por “última ação”
+  static String _activityKey(String imdbID) => 'activity_$imdbID';
 
   // ---------- Watchlist ----------
   static Future<void> saveToWatchlist(Movie movie) async {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList(_watchlistKey) ?? [];
+
+    // mantém a ordem de adição: remove se existir e adiciona no fim
     list.removeWhere((e) => Movie.fromJson(jsonDecode(e)).imdbID == movie.imdbID);
     list.add(jsonEncode(movie.toJson()));
     await prefs.setStringList(_watchlistKey, list);
@@ -24,8 +29,11 @@ class WatchlistHelper {
     final list = prefs.getStringList(_watchlistKey) ?? [];
     list.removeWhere((e) => Movie.fromJson(jsonDecode(e)).imdbID == imdbID);
     await prefs.setStringList(_watchlistKey, list);
+
+    // limpa dados relacionados
     await prefs.remove(_watchedKey(imdbID));
-    await prefs.remove(_movieWatchedKey(imdbID)); // 🔹 limpa flag do filme
+    await prefs.remove(_movieWatchedKey(imdbID));
+    await prefs.remove(_activityKey(imdbID));
   }
 
   static Future<List<Movie>> getWatchlist() async {
@@ -58,6 +66,7 @@ class WatchlistHelper {
       list.add(episodeKey);
     }
     await saveWatchedEpisodes(imdbID, list);
+    await bumpActivity(imdbID); // 🔥 marca atividade sempre que mexer em episódios
   }
 
   static String lastWatchedLabel(List<String> watched) {
@@ -93,5 +102,16 @@ class WatchlistHelper {
   static Future<void> toggleMovieWatched(String imdbID) async {
     final current = await isMovieWatched(imdbID);
     await setMovieWatched(imdbID, !current);
+  }
+
+  // ---------- NOVO: atividade (para ordenar séries) ----------
+  static Future<void> bumpActivity(String imdbID) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_activityKey(imdbID), DateTime.now().millisecondsSinceEpoch);
+  }
+
+  static Future<int> getActivity(String imdbID) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_activityKey(imdbID)) ?? 0; // 0 = sem atividade ainda
   }
 }

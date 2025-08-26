@@ -34,7 +34,26 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Movie> get _movies =>
       _watchlist.where((m) => m.type.toLowerCase() == 'movie').toList();
 
-  // --------- SÉRIES (abre detalhes p/ marcar episódios) ----------
+  // ---- ordenação das séries (atividade recente no topo; novas no fim) ----
+  Future<List<Movie>> _getSortedSeries() async {
+    final series = _series;
+    final List<_SeriesRow> rows = [];
+
+    for (var i = 0; i < series.length; i++) {
+      final m = series[i];
+      final act = await WatchlistHelper.getActivity(m.imdbID); // 0 = sem atividade
+      rows.add(_SeriesRow(index: i, activity: act, movie: m));
+    }
+
+    rows.sort((a, b) {
+      if (a.activity != b.activity) return b.activity.compareTo(a.activity);
+      return a.index.compareTo(b.index); // mantém ordem original em empates
+    });
+
+    return rows.map((e) => e.movie).toList();
+  }
+
+  // ---------------- SÉRIES ----------------
   Widget _buildSeriesCard(Movie m) {
     return FutureBuilder(
       future: Future.wait([
@@ -62,13 +81,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               );
-              _loadWatchlist(); // refresh ao voltar
+              _loadWatchlist();
             },
             child: Row(
               children: [
                 (m.poster != 'N/A')
-                    ? Image.network(m.poster, width: 80, height: 100, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.image))
+                    ? Image.network(
+                        m.poster,
+                        width: 80,
+                        height: 100,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.image),
+                      )
                     : Container(width: 80, height: 100, color: Colors.grey),
                 const SizedBox(width: 10),
                 Expanded(
@@ -96,19 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(
-                    status.startsWith('✅')
-                        ? Icons.check_circle
-                        : status.startsWith('🆕')
-                            ? Icons.fiber_new
-                            : Icons.timelapse,
-                    color: status.startsWith('✅')
-                        ? Colors.green
-                        : (status.startsWith('🆕') ? Colors.blueGrey : Colors.orange),
-                  ),
-                ),
+                const SizedBox(width: 8),
               ],
             ),
           ),
@@ -117,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --------- FILMES (checkbox direto na lista) ----------
+  // ---------------- FILMES (checkbox direto) ----------------
   Widget _buildMovieCard(Movie m) {
     return FutureBuilder<bool>(
       future: WatchlistHelper.isMovieWatched(m.imdbID),
@@ -129,8 +141,13 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             children: [
               (m.poster != 'N/A')
-                  ? Image.network(m.poster, width: 80, height: 100, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.image))
+                  ? Image.network(
+                      m.poster,
+                      width: 80,
+                      height: 100,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.image),
+                    )
                   : Container(width: 80, height: 100, color: Colors.grey),
               const SizedBox(width: 10),
               Expanded(
@@ -145,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   value: watched,
                   onChanged: (val) async {
                     await WatchlistHelper.setMovieWatched(m.imdbID, val ?? false);
-                    setState(() {}); // atualiza item
+                    setState(() {});
                   },
                 ),
               ),
@@ -156,17 +173,34 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildList(List<Movie> data, {required bool isSeriesTab}) {
-    if (data.isEmpty) {
-      return const Center(child: Text('Nada por aqui ainda.'));
-    }
+  Widget _buildSeriesList() {
+    return FutureBuilder<List<Movie>>(
+      future: _getSortedSeries(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final data = snapshot.data!;
+        if (data.isEmpty) return const Center(child: Text('Nada por aqui ainda.'));
+        return RefreshIndicator(
+          onRefresh: _loadWatchlist,
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            itemCount: data.length,
+            itemBuilder: (_, i) => _buildSeriesCard(data[i]),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMoviesList() {
+    final data = _movies;
+    if (data.isEmpty) return const Center(child: Text('Nada por aqui ainda.'));
     return RefreshIndicator(
       onRefresh: _loadWatchlist,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         itemCount: data.length,
-        itemBuilder: (_, i) =>
-            isSeriesTab ? _buildSeriesCard(data[i]) : _buildMovieCard(data[i]),
+        itemBuilder: (_, i) => _buildMovieCard(data[i]),
       ),
     );
   }
@@ -176,9 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Provider.of<ThemeController>(context, listen: false);
 
     final titles = ['Séries', 'Filmes'];
-    final body = _currentIndex == 0
-        ? _buildList(_series, isSeriesTab: true)
-        : _buildList(_movies, isSeriesTab: false);
+    final body = _currentIndex == 0 ? _buildSeriesList() : _buildMoviesList();
 
     return Scaffold(
       appBar: AppBar(
@@ -188,16 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.brightness_6),
             onPressed: () => theme.toggleTheme(),
           ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SearchScreen()),
-              );
-              _loadWatchlist();
-            },
-          ),
+          // 🔥 REMOVIDO: ícone de busca no topo
         ],
       ),
       body: body,
@@ -222,4 +245,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _SeriesRow {
+  final int index;
+  final int activity;
+  final Movie movie;
+  _SeriesRow({required this.index, required this.activity, required this.movie});
 }
